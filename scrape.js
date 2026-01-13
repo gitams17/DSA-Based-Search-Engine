@@ -13,10 +13,12 @@ async function scrapeLeetcodeProblems() {
       "AppleWebKit/537.36 (KHTML, like Gecko) " +
       "Chrome/114.0.5735.199 Safari/537.36"
   );
-  await page.goto("https://leetcode.com/problemset/");
-  const problemSelector =
-    "a.group.flex.flex-col.rounded-\\[8px\\].duration-300";
-  await page.waitForSelector('a[id="1"]');
+  await page.goto("https://leetcode.com/problemset/", {
+    waitUntil: "domcontentloaded",
+  });
+
+  const problemSelector = "a.group.flex.flex-col.rounded-\\[8px\\].duration-300";
+
   let allProblems = [];
   let prevCount = 0;
   const TARGET = 3800;
@@ -30,6 +32,7 @@ async function scrapeLeetcodeProblems() {
         });
       }
     }, problemSelector);
+    
     await page.waitForFunction(
       (sel, prev) => document.querySelectorAll(sel).length > prev,
       {},
