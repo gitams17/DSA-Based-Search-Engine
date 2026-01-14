@@ -1,0 +1,96 @@
+import fs from "fs/promises";
+import path from "path";
+import natural from "natural";
+const { TfIdf } = natural;
+const DATA_PATH = path.resolve("data/all_problems.json");
+
+let problems = [];
+let tfidf = new TfIdf();
+let docVectors = [];
+let docMagnitudes = [];
+
+// Helper to preprocess text (remove special chars, lowercase)
+const preprocess = (text) => {
+  if (!text) return "";
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
+export const initializeIndex = async () => {
+  try {
+    const data = await fs.readFile(DATA_PATH, "utf-8");
+    problems = JSON.parse(data);
+    console.log(`Loaded ${problems.length} problems into memory.`);
+
+    tfidf = new TfIdf();
+
+    // 1. Build TF-IDF Index
+    problems.forEach((p, idx) => {
+      const content = `${p.title} ${p.title} ${p.description || ""}`;
+      tfidf.addDocument(preprocess(content), idx.toString());
+    });
+
+    // 2. Precompute Vectors for Cosine Similarity
+    docVectors = [];
+    docMagnitudes = [];
+
+    problems.forEach((_, idx) => {
+      const vector = {};
+      let sumSquares = 0;
+      tfidf.listTerms(idx).forEach(({ term, tfidf: weight }) => {
+        vector[term] = weight;
+        sumSquares += weight * weight;
+      });
+      docVectors[idx] = vector;
+      docMagnitudes[idx] = Math.sqrt(sumSquares);
+    });
+
+    console.log("Search index built successfully.");
+  } catch (err) {
+    console.error("Error building index (ensure data/all_problems.json exists):", err.message);
+    problems = [];
+  }
+};
+
+export const searchProblems = (queryStr) => {
+  if (!queryStr || problems.length === 0) return [];
+
+  const query = preprocess(queryStr);
+  const tokens = query.split(" ").filter(Boolean);
+  const termFreq = {};
+
+  tokens.forEach((t) => (termFreq[t] = (termFreq[t] || 0) + 1));
+
+  // Build Query Vector
+  const queryVector = {};
+  let sumSqQ = 0;
+  Object.entries(termFreq).forEach(([term, count]) => {
+    const tf = count / tokens.length;
+    const idf = tfidf.idf(term);
+    const w = tf * idf;
+    queryVector[term] = w;
+    sumSqQ += w * w;
+  });
+  const queryMag = Math.sqrt(sumSqQ) || 1;
+
+  // Cosine Similarity
+  const scores = problems.map((_, idx) => {
+    const docVec = docVectors[idx];
+    const docMag = docMagnitudes[idx] || 1;
+    let dot = 0;
+    for (const [term, wq] of Object.entries(queryVector)) {
+      if (docVec[term]) dot += wq * docVec[term];
+    }
+    return { idx, score: dot / (queryMag * docMag) };
+  });
+
+  // Return Top 20
+  return scores
+    .filter((s) => s.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 20)
+    .map(({ idx }) => problems[idx]);
+};

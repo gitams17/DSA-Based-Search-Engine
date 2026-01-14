@@ -15,15 +15,19 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "merge": "node utils/merge.js",
-    "scrape": "node scrape.js",
-    "dev": "nodemon index.js",
-    "start": "node index.js"
+    "install-all": "npm install && cd client && npm install && cd ../server && npm install && cd ../scrapers && npm install",
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm run dev",
+    "scrape": "cd scrapers && node index.js",
+    "dev": "concurrently \"npm run server\" \"npm run client\""
   },
   "dependencies": {
     "express": "^5.2.1",
     "natural": "^8.1.0",
     "puppeteer": "^24.34.0",
     "stopword": "^3.1.5"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }
