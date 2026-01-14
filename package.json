@@ -17,6 +17,7 @@
   "scripts": {
     "merge": "node utils/merge.js",
     "scrape": "node scrape.js",
+    "dev": "nodemon index.js",
     "start": "node index.js"
   },
   "dependencies": {
