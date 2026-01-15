@@ -1,108 +1,90 @@
 import puppeteer from "puppeteer";
 
 export async function scrapeLeetcode() {
-  console.log("Starting LeetCode Scrape...");
+  console.log("🟡 [LeetCode] Starting scrape...");
   const browser = await puppeteer.launch({
-    headless: false, // LeetCode often blocks headless, so keep this false
+    headless: false,
     defaultViewport: null,
     args: ["--disable-blink-features=AutomationControlled"],
   });
 
   const page = await browser.newPage();
   await page.setUserAgent(
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.5735.199 Safari/537.36"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
   );
 
-  await page.goto("https://leetcode.com/problemset/", {
-    waitUntil: "domcontentloaded",
-  });
+  const problems = [];
+  const LIMIT = 500; // Adjust as needed
 
-  const problemSelector = "a.group.flex.flex-col.rounded-\\[8px\\].duration-300";
-  
-  let allProblems = [];
-  let prevCount = 0;
-  const TARGET = 50; // Reduced for testing. Set to 3000+ for full scrape.
+  try {
+    await page.goto("https://leetcode.com/problemset/", {
+      waitUntil: "networkidle2",
+    });
 
-  console.log(`Fetching list of ${TARGET} problems...`);
+    // More robust selector than specific Tailwind classes
+    const problemSelector = 'a[href^="/problems/"]';
+    const links = new Set();
 
-  while (allProblems.length < TARGET) {
-    // Scroll to bottom to trigger infinite load
-    await page.evaluate((sel) => {
-      const currProblemsOnPage = document.querySelectorAll(sel);
-      if (currProblemsOnPage.length) {
-        currProblemsOnPage[currProblemsOnPage.length - 1].scrollIntoView({
-          behavior: "smooth",
-          block: "end",
+    console.log("   [LeetCode] collecting links...");
+
+    while (links.size < LIMIT) {
+      // Collect visible links
+      const newLinks = await page.evaluate((sel) => {
+        return Array.from(document.querySelectorAll(sel))
+          .map((a) => a.href)
+          .filter(
+            (h) => !h.includes("/solution") && !h.includes("/submissions")
+          );
+      }, problemSelector);
+
+      newLinks.forEach((l) => links.add(l));
+
+      // Scroll down
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+
+      // Wait a bit for lazy load
+      await new Promise((r) => setTimeout(r, 1500));
+
+      // Break if we are stuck or have enough
+      if (newLinks.length === 0 && links.size > 0) break;
+    }
+
+    const targetLinks = Array.from(links).slice(0, LIMIT);
+
+    for (let i = 0; i < targetLinks.length; i++) {
+      const url = targetLinks[i];
+      const pPage = await browser.newPage();
+      try {
+        await pPage.goto(url, { waitUntil: "domcontentloaded" });
+
+        const data = await pPage.evaluate(() => {
+          const title = document.title.split("-")[0].trim();
+          const descEl =
+            document.querySelector('[data-track-load="description_content"]') ||
+            document.querySelector(".elfjS");
+          return {
+            title,
+            description: descEl ? descEl.innerText.replace(/\n/g, " ") : "",
+          };
         });
-      }
-    }, problemSelector);
 
-    // Wait for new items to load
-    try {
-      await page.waitForFunction(
-        (sel, prev) => document.querySelectorAll(sel).length > prev,
-        { timeout: 5000 },
-        problemSelector,
-        prevCount
-      );
-    } catch (e) {
-      console.log("No new problems loaded or timeout reached.");
-      break;
-    }
-
-    allProblems = await page.evaluate((sel) => {
-      const nodes = Array.from(document.querySelectorAll(sel));
-      return nodes.map((el) => ({
-        title: el.textContent.split(". ")[1] || "Untitled", // Robustness check
-        url: el.href,
-      }));
-    }, problemSelector);
-
-    prevCount = allProblems.length;
-    console.log(`Loaded ${prevCount} problems...`);
-  }
-
-  // Slice to target to avoid processing too many if over-fetched
-  allProblems = allProblems.slice(0, TARGET);
-
-  // Visit each URL to get the description
-  const problemsWithDescriptions = [];
-  console.log("Fetching problem descriptions...");
-
-  for (let i = 0; i < allProblems.length; i++) {
-    const { title, url } = allProblems[i];
-    if (!url) continue;
-
-    const problemPage = await browser.newPage();
-    try {
-      await problemPage.goto(url, { waitUntil: "domcontentloaded" });
-      
-      const description = await problemPage.evaluate(() => {
-        const descriptionDiv = document.querySelector(
-          'div.elfjS[data-track-load="description_content"]'
-        );
-        if (!descriptionDiv) return "";
-        
-        const paragraphs = descriptionDiv.querySelectorAll("p");
-        let collectedDescription = [];
-        for (const p of paragraphs) {
-          if (p.innerHTML.trim() === "&nbsp;") break;
-          collectedDescription.push(p.innerText.trim());
+        if (data.description) {
+          problems.push({ ...data, url, platform: "LeetCode" });
+          console.log(
+            `   [${i + 1}/${targetLinks.length}] LeetCode: ${data.title}`
+          );
         }
-        return collectedDescription.filter((text) => text !== "").join(" ");
-      });
-
-      if (description) {
-        problemsWithDescriptions.push({ title, url, description });
-        console.log(`[${i + 1}/${allProblems.length}] Scraped: ${title}`);
+      } catch (e) {
+        console.warn(`   Failed: ${url}`);
+      } finally {
+        await pPage.close();
       }
-    } catch (err) {
-      console.error(`Error fetching ${title}:`, err.message);
-    } finally {
-      await problemPage.close();
     }
+    return problems;
+  } catch (error) {
+    console.error("LeetCode Error:", error);
+    return [];
+  } finally {
+    await browser.close();
   }
-
-  await browser.close();
-  return problemsWithDescriptions;
 }

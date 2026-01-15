@@ -18,7 +18,7 @@ export async function scrapeCSES() {
 
   const problems = [];
   // Limit to first 20 for demo purposes, remove slice for full scrape
-  for (const task of tasks.slice(0, 50)) {
+  for (const task of tasks) {
     try {
         await page.goto(task.url, { waitUntil: "domcontentloaded" });
         const description = await page.evaluate(() => {
