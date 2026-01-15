@@ -11,17 +11,17 @@ async function runAll() {
     
     // Run them sequentially or use Promise.all() for parallelism (careful with RAM/CPU)
     
-    // const leetcode = await scrapeLeetcode();
-    // const codeforces = await scrapeCodeforces();
-    // const cses = await scrapeCSES();
-    // const atcoder = await scrapeAtCoder();
-    // const codechef = await scrapeCodeChef();
+    const leetcode = await scrapeLeetcode();
+    const codeforces = await scrapeCodeforces();
+    const cses = await scrapeCSES();
+    const atcoder = await scrapeAtCoder();
+    const codechef = await scrapeCodeChef();
 
-    // allData.push(...leetcode, ...codeforces, ...cses, ...atcoder, ...codechef);
+    allData.push(...leetcode, ...codeforces, ...cses, ...atcoder, ...codechef);
 
     // For testing, maybe just run one:
-    const leetcode = await scrapeLeetcode(); 
-    allData.push(...leetcode);
+    // const leetcode = await scrapeLeetcode(); 
+    // allData.push(...leetcode);
 
     // Ensure directory exists
     const outputDir = path.resolve("../server/data");
